@@ -59,11 +59,11 @@ function Editor() {
   const stageRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
 
-  // Semilla: imagen de apoyo por defecto en la biblioteca
+  // Semilla: imagen de apoyo por defecto en la biblioteca (versión 2: encuadre más amplio)
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.localStorage.getItem("cun-creativo:seeded")) return;
-    window.localStorage.setItem("cun-creativo:seeded", "1");
+    if (window.localStorage.getItem("cun-creativo:seeded:v2")) return;
+    window.localStorage.setItem("cun-creativo:seeded:v2", "1");
     addFromUrl(fondoCampus, "fondo-campus.jpg", "apoyo")
       .then((asset) => {
         setContent((prev) => (prev.backgroundId ? prev : { ...prev, backgroundId: asset.id }));
