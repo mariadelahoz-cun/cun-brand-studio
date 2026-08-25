@@ -47,12 +47,24 @@ export const PiecePreview = forwardRef<HTMLDivElement, Props>(function PiecePrev
           position: "absolute",
           inset: 0,
           backgroundColor: brand.colors.gray,
-          backgroundImage: backgroundUrl ? `url(${backgroundUrl})` : undefined,
-          backgroundSize: `${content.bgZoom}% auto`,
-          backgroundPosition: `${content.bgPosX}% ${content.bgPosY}%`,
-          backgroundRepeat: "no-repeat",
         }}
-      />
+      >
+        {backgroundUrl ? (
+          <img
+            src={backgroundUrl}
+            alt="Imagen de fondo de la pieza"
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: `${content.bgPosX}% ${content.bgPosY}%`,
+              transform: `scale(${content.bgZoom / 100})`,
+              transformOrigin: `${content.bgPosX}% ${content.bgPosY}%`,
+              display: "block",
+            }}
+          />
+        ) : null}
+      </div>
 
       {/* Capa: panel de contenido con color institucional */}
       <div
