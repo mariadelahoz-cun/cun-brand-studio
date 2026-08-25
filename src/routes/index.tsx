@@ -62,8 +62,21 @@ function Editor() {
     if (typeof window === "undefined") return;
     if (window.localStorage.getItem("cun-creativo:seeded")) return;
     window.localStorage.setItem("cun-creativo:seeded", "1");
-    addFromUrl(fondoCampus, "fondo-campus.jpg", "apoyo").catch(() => undefined);
+    addFromUrl(fondoCampus, "fondo-campus.jpg", "apoyo")
+      .then((asset) => {
+        setContent((prev) => (prev.backgroundId ? prev : { ...prev, backgroundId: asset.id }));
+      })
+      .catch(() => undefined);
   }, [addFromUrl]);
+
+  useEffect(() => {
+    if (content.backgroundId) return;
+    const firstBackground = assets.find((asset) => asset.category === "apoyo");
+    if (!firstBackground) return;
+    setContent((prev) =>
+      prev.backgroundId ? prev : { ...prev, backgroundId: firstBackground.id },
+    );
+  }, [assets, content.backgroundId]);
 
   useEffect(() => {
     const el = stageRef.current;
