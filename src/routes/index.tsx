@@ -283,7 +283,25 @@ function Editor() {
               <Separator />
 
               <div className="space-y-4">
-                <Label>Encuadre de la imagen</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Encuadre de la imagen</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() =>
+                      setContent((prev) => ({
+                        ...prev,
+                        bgPosX: DEFAULT_CONTENT.bgPosX,
+                        bgPosY: DEFAULT_CONTENT.bgPosY,
+                        bgZoom: DEFAULT_CONTENT.bgZoom,
+                      }))
+                    }
+                  >
+                    Restablecer encuadre
+                  </Button>
+                </div>
                 <SliderRow
                   label="Horizontal"
                   value={content.bgPosX}
@@ -296,8 +314,8 @@ function Editor() {
                 />
                 <SliderRow
                   label="Zoom"
-                  min={100}
-                  max={200}
+                  min={80}
+                  max={140}
                   value={content.bgZoom}
                   onChange={(v) => set("bgZoom", v)}
                 />
