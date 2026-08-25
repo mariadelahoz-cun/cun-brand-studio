@@ -36,11 +36,13 @@ export const Route = createFileRoute("/")({
           "Plataforma interna de la CUN para crear posts, historias y banners aplicando automáticamente el manual de marca institucional.",
       },
       { property: "og:title", content: "CUN Creativo — Generador de piezas de marca" },
+      { property: "og:type", content: "website" },
       {
         property: "og:description",
         content:
           "Crea piezas de marketing digital de la CUN con colores, tipografías y márgenes de marca aplicados automáticamente.",
       },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Editor,
