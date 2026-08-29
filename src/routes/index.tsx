@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toBlob } from "html-to-image";
 import JSZip from "jszip";
 import { Check, Download, Package, RotateCcw, Sparkles, X } from "lucide-react";
@@ -337,7 +337,7 @@ function Section({
 }: {
   step: string;
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-border bg-background p-5 shadow-sm">
