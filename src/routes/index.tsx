@@ -1,158 +1,136 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toBlob } from "html-to-image";
-import { Download, Link2, RotateCcw, Sparkles } from "lucide-react";
+import JSZip from "jszip";
+import { Check, Download, Package, RotateCcw, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "@tanstack/react-router";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 
-import { PiecePreview } from "@/components/editor/PiecePreview";
-import { MediaLibrary } from "@/components/editor/MediaLibrary";
-import { BrandSettings } from "@/components/editor/BrandSettings";
-import { useBrandConfig } from "@/lib/use-brand-config";
+import { CampaignForm } from "@/components/campaign/CampaignForm";
+import { CopyPanel } from "@/components/campaign/CopyPanel";
+import { TemplateGallery } from "@/components/campaign/TemplateGallery";
+import { AssetZones } from "@/components/campaign/AssetZones";
+import { PieceCanvas } from "@/components/campaign/PieceCanvas";
+
+import { useCampaign } from "@/lib/use-campaign";
 import { useMediaLibrary } from "@/lib/media-library";
-import {
-  COLOR_SCHEMES,
-  DEFAULT_CONTENT,
-  TEMPLATES,
-  fileName,
-  type PieceContent,
-} from "@/lib/brand";
-import fondoCampus from "@/assets/fondo-campus.jpg";
+import { useSeedLibrary } from "@/lib/seed-library";
+import { validateCopy } from "@/lib/copy-rules";
+import { FORMATS, FORMAT_ORDER, exportFileName, templateById, type FormatId } from "@/lib/brand";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "CUN Creativo — Generador de piezas de marca CUN" },
+      { title: "CUN Creativo — Campañas con templates de marca" },
       {
         name: "description",
         content:
-          "Plataforma interna de la CUN para crear posts, historias y banners aplicando automáticamente el manual de marca institucional.",
+          "Plataforma interna de la CUN para armar campañas en tres formatos con templates y bibliotecas de assets pre-aprobados por diseño.",
       },
-      { property: "og:title", content: "CUN Creativo — Generador de piezas de marca" },
+      { property: "og:title", content: "CUN Creativo — Campañas con templates de marca" },
       { property: "og:type", content: "website" },
       {
         property: "og:description",
         content:
-          "Crea piezas de marketing digital de la CUN con colores, tipografías y márgenes de marca aplicados automáticamente.",
+          "Formulario de campaña, validación de copy, bibliotecas curadas y exportación de los tres formatos aprobados.",
       },
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  component: Editor,
+  component: CampaignWorkspace,
 });
 
-const TEMPLATE = TEMPLATES["post-1080"];
+function CampaignWorkspace() {
+  const { campaign, patch, setStatus, reset, allApproved } = useCampaign();
+  const { assets, addFromUrl } = useMediaLibrary();
+  useSeedLibrary(addFromUrl);
 
-function Editor() {
-  const { brand, update, reset } = useBrandConfig();
-  const { assets, addFiles, addFromUrl, remove } = useMediaLibrary();
-  const [content, setContent] = useState<PieceContent>(DEFAULT_CONTENT);
   const [exporting, setExporting] = useState(false);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.5);
+  const canvasRefs = useRef<Record<FormatId, HTMLDivElement | null>>({
+    cuadrado: null,
+    story: null,
+    banner: null,
+  });
 
-  // Semilla: imagen de apoyo por defecto en la biblioteca (versión 2: encuadre más amplio)
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.localStorage.getItem("cun-creativo:seeded:v2")) return;
-    window.localStorage.setItem("cun-creativo:seeded:v2", "1");
-    addFromUrl(fondoCampus, "fondo-campus.jpg", "apoyo")
-      .then((asset) => {
-        setContent((prev) => (prev.backgroundId ? prev : { ...prev, backgroundId: asset.id }));
-      })
-      .catch(() => undefined);
-  }, [addFromUrl]);
+  const template = templateById(campaign.templateId);
+  const copyCheck = validateCopy(campaign.copy);
 
-  useEffect(() => {
-    if (content.backgroundId) return;
-    const firstBackground = assets.find((asset) => asset.category === "apoyo");
-    if (!firstBackground) return;
-    setContent((prev) =>
-      prev.backgroundId ? prev : { ...prev, backgroundId: firstBackground.id },
-    );
-  }, [assets, content.backgroundId]);
-
-  useEffect(() => {
-    const el = stageRef.current;
-    if (!el) return;
-    const fit = () => {
-      const box = el.getBoundingClientRect();
-      const size = Math.min(box.width, box.height || box.width);
-      setScale(Math.max(0.2, size / TEMPLATE.width));
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const set = <K extends keyof PieceContent>(key: K, value: PieceContent[K]) =>
-    setContent((prev) => ({ ...prev, [key]: value }));
-
-  const logoUrl = useMemo(
-    () => assets.find((a) => a.id === content.logoId)?.dataUrl ?? null,
-    [assets, content.logoId],
-  );
-  const backgroundUrl = useMemo(
-    () => assets.find((a) => a.id === content.backgroundId)?.dataUrl ?? null,
-    [assets, content.backgroundId],
+  const url = (id: string | null) => assets.find((a) => a.id === id)?.dataUrl ?? null;
+  const canvasAssets = useMemo(
+    () => ({
+      fotoUrl: url(campaign.fotoId),
+      brainrotUrl: url(campaign.brainrotId),
+      texturaUrls: campaign.texturaIds
+        .map((id) => url(id))
+        .filter((u): u is string => Boolean(u)),
+      logoUrl: url(campaign.logoId),
+    }),
+    [assets, campaign.fotoId, campaign.brainrotId, campaign.texturaIds, campaign.logoId],
   );
 
-  async function render() {
-    const node = canvasRef.current;
+  const checklist = [
+    { label: "SNIES confirmado y fijo", ok: campaign.sniesConfirmed },
+    { label: "Template de campaña seleccionado", ok: Boolean(template) },
+    { label: "Copy completo (6 campos)", ok: copyCheck.missing.length === 0 },
+    { label: `Conteo de copy ≤ 24 palabras (${copyCheck.wordCount})`, ok: copyCheck.wordsOk },
+    { label: "Validación léxica aprobada", ok: copyCheck.hits.length === 0 },
+    { label: "CTA con ruta aprobada (2–5 palabras)", ok: copyCheck.cta.ok },
+    { label: "Fotografía aplicada", ok: Boolean(campaign.fotoId) },
+    { label: "Exactamente 1 recurso Brainrot", ok: Boolean(campaign.brainrotId) },
+    { label: "Mínimo 3 texturas Analogue", ok: campaign.texturaIds.length >= 3 },
+    { label: "Franja institucional reservada (12–18%)", ok: true },
+  ];
+  const qcOk = checklist.every((c) => c.ok);
+
+  function nextApprovable(): FormatId | null {
+    for (const f of FORMAT_ORDER) if (campaign.status[f] !== "aprobado") return f;
+    return null;
+  }
+
+  async function renderFormat(format: FormatId) {
+    const node = canvasRefs.current[format];
     if (!node) return null;
+    const f = FORMATS[format];
     return toBlob(node, {
-      width: TEMPLATE.width,
-      height: TEMPLATE.height,
+      width: f.width,
+      height: f.height,
       pixelRatio: 1,
       cacheBust: true,
       style: { transform: "none", transformOrigin: "top left" },
     });
   }
 
-  async function handleDownload() {
+  async function handleZip() {
     setExporting(true);
     try {
-      const blob = await render();
-      if (!blob) throw new Error("No se pudo generar la imagen");
-      const url = URL.createObjectURL(blob);
+      const zip = new JSZip();
+      for (const format of FORMAT_ORDER) {
+        const blob = await renderFormat(format);
+        if (!blob) throw new Error("render");
+        zip.file(exportFileName(campaign.programa, campaign.ciudad, format), blob);
+      }
+      const out = await zip.generateAsync({ type: "blob" });
+      const href = URL.createObjectURL(out);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName(TEMPLATE.id, "png");
+      a.href = href;
+      a.download = `${campaign.programa || "CAMPANA"}_CUN.zip`.toUpperCase();
       a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Pieza exportada en 1080 × 1080 px");
+      URL.revokeObjectURL(href);
+      toast.success("Paquete de campaña exportado con los tres formatos");
     } catch {
-      toast.error("No se pudo exportar la pieza");
+      toast.error("No se pudo generar el paquete ZIP");
     } finally {
       setExporting(false);
     }
   }
 
-  async function handleShare() {
-    setExporting(true);
-    try {
-      const blob = await render();
-      if (!blob) throw new Error();
-      const url = URL.createObjectURL(blob);
-      await navigator.clipboard.writeText(url);
-      toast.success("Enlace temporal copiado", {
-        description: "Válido mientras esta pestaña siga abierta.",
-      });
-    } catch {
-      toast.error("No se pudo copiar el enlace");
-    } finally {
-      setExporting(false);
-    }
-  }
+  const locked = !campaign.sniesConfirmed;
+  const pending = nextApprovable();
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -165,231 +143,211 @@ function Editor() {
             </span>
             <div>
               <h1 className="text-sm font-semibold leading-tight text-foreground">CUN Creativo</h1>
-              <p className="text-xs text-muted-foreground">
-                Piezas de marca · {TEMPLATE.label}
-              </p>
+              <p className="text-xs text-muted-foreground">Campañas con templates aprobados</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setContent({ ...DEFAULT_CONTENT, logoId: content.logoId })}
-            >
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/admin">Panel de administración</Link>
+            </Button>
+            <Button variant="outline" size="sm" onClick={reset}>
               <RotateCcw className="mr-1.5 size-3.5" />
-              Restablecer plantilla
+              Nueva campaña
             </Button>
-            <Button variant="outline" size="sm" onClick={handleShare} disabled={exporting}>
-              <Link2 className="mr-1.5 size-3.5" />
-              Copiar enlace
-            </Button>
-            <Button size="sm" onClick={handleDownload} disabled={exporting}>
-              <Download className="mr-1.5 size-3.5" />
-              Descargar PNG
+            <Button size="sm" onClick={handleZip} disabled={!allApproved || exporting}>
+              <Package className="mr-1.5 size-3.5" />
+              Descargar ZIP
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-[1600px] gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        {/* Lienzo */}
-        <section
-          ref={stageRef}
-          className="flex min-h-[520px] items-center justify-center rounded-xl border border-border bg-background p-6 shadow-sm"
-        >
-          <div
-            className="overflow-hidden rounded-md ring-1 ring-border"
-            style={{ width: TEMPLATE.width * scale, height: TEMPLATE.height * scale }}
-          >
-            <div style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
-              <PiecePreview
-                ref={canvasRef}
-                brand={brand}
-                template={TEMPLATE}
-                content={content}
-                logoUrl={logoUrl}
-                backgroundUrl={backgroundUrl}
-              />
-            </div>
-          </div>
-        </section>
+      <main className="mx-auto grid max-w-[1600px] gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="space-y-6">
+          <Section step="1" title="Datos de la campaña">
+            <CampaignForm campaign={campaign} onChange={patch} />
+          </Section>
 
-        {/* Panel lateral */}
-        <aside className="rounded-xl border border-border bg-background p-4 shadow-sm">
-          <Tabs defaultValue="contenido">
-            <TabsList className="w-full">
-              <TabsTrigger value="contenido" className="flex-1">
-                Contenido
-              </TabsTrigger>
-              <TabsTrigger value="medios" className="flex-1">
-                Medios
-              </TabsTrigger>
-              <TabsTrigger value="marca" className="flex-1">
-                Marca
-              </TabsTrigger>
-            </TabsList>
+          <Section step="2" title="Template de campaña (define los tres formatos)">
+            <TemplateGallery
+              selectedId={campaign.templateId}
+              onSelect={(id) => patch({ templateId: id })}
+              disabled={locked}
+            />
+          </Section>
 
-            <TabsContent value="contenido" className="mt-4 space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="titulo">Título</Label>
-                <Input
-                  id="titulo"
-                  value={content.title}
-                  onChange={(e) => set("title", e.target.value)}
-                  maxLength={60}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="subtitulo">Subtítulo</Label>
-                <Input
-                  id="subtitulo"
-                  value={content.subtitle}
-                  onChange={(e) => set("subtitle", e.target.value)}
-                  maxLength={80}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cta">Call to action</Label>
-                <Input
-                  id="cta"
-                  value={content.cta}
-                  onChange={(e) => set("cta", e.target.value)}
-                  maxLength={40}
-                />
-              </div>
+          <Section step="3" title="Copy de la pieza">
+            <CopyPanel
+              copy={campaign.copy}
+              onChange={(copy) => patch({ copy })}
+              programa={campaign.programa}
+              modalidad={campaign.modalidad}
+              ciudad={campaign.ciudad}
+              snies={campaign.snies}
+            />
+          </Section>
 
-              <Separator />
+          <Section step="4" title="Assets por zona">
+            <AssetZones
+              assets={assets}
+              fotoId={campaign.fotoId}
+              brainrotId={campaign.brainrotId}
+              texturaIds={campaign.texturaIds}
+              logoId={campaign.logoId}
+              onChange={patch}
+            />
+          </Section>
 
-              <div className="space-y-2">
-                <Label>Combinación de color permitida</Label>
-                <div className="flex gap-2">
-                  {COLOR_SCHEMES.map((s) => (
-                    <Button
-                      key={s.id}
-                      type="button"
-                      size="sm"
-                      variant={content.scheme === s.id ? "default" : "outline"}
-                      onClick={() => set("scheme", s.id)}
-                    >
-                      {s.label}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Solo combinaciones aprobadas por el manual de marca.
-                </p>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label>Encuadre de la imagen</Label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() =>
-                      setContent((prev) => ({
-                        ...prev,
-                        bgPosX: DEFAULT_CONTENT.bgPosX,
-                        bgPosY: DEFAULT_CONTENT.bgPosY,
-                        bgZoom: DEFAULT_CONTENT.bgZoom,
-                      }))
-                    }
+          <Section step="5" title="Aprobación secuencial de formatos">
+            <div className="space-y-3">
+              {FORMAT_ORDER.map((format, i) => {
+                const f = FORMATS[format];
+                const status = campaign.status[format];
+                const isNext = pending === format;
+                const previousOk = FORMAT_ORDER.slice(0, i).every(
+                  (p) => campaign.status[p] === "aprobado",
+                );
+                return (
+                  <div
+                    key={format}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background p-3"
                   >
-                    Restablecer encuadre
-                  </Button>
-                </div>
-                <SliderRow
-                  label="Horizontal"
-                  value={content.bgPosX}
-                  onChange={(v) => set("bgPosX", v)}
-                />
-                <SliderRow
-                  label="Vertical"
-                  value={content.bgPosY}
-                  onChange={(v) => set("bgPosY", v)}
-                />
-                <SliderRow
-                  label="Zoom"
-                  min={80}
-                  max={140}
-                  value={content.bgZoom}
-                  onChange={(v) => set("bgZoom", v)}
-                />
-              </div>
-            </TabsContent>
-
-            <TabsContent value="medios" className="mt-4 space-y-5">
-              <MediaLibrary
-                category="logo"
-                assets={assets}
-                selectedId={content.logoId}
-                onSelect={(id) => set("logoId", id)}
-                onUpload={(files) => {
-                  addFiles(files, "logo").then((created) => {
-                    if (created[0]) set("logoId", created[0].id);
-                  });
-                }}
-                onRemove={remove}
-              />
-              <Separator />
-              <MediaLibrary
-                category="apoyo"
-                assets={assets}
-                selectedId={content.backgroundId}
-                onSelect={(id) => set("backgroundId", id)}
-                onUpload={(files) => {
-                  addFiles(files, "apoyo").then((created) => {
-                    if (created[0]) set("backgroundId", created[0].id);
-                  });
-                }}
-                onRemove={remove}
-              />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {f.label} · {f.width}×{f.height}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {exportFileName(campaign.programa, campaign.ciudad, format)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={status === "aprobado" ? "secondary" : "outline"}>
+                        {status === "aprobado" ? "Aprobado" : "Pendiente"}
+                      </Badge>
+                      {status === "aprobado" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setStatus(format, "pendiente")}
+                        >
+                          Reabrir
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={!qcOk || !previousOk || !isNext}
+                          onClick={() => setStatus(format, "aprobado")}
+                        >
+                          Aprobar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               <p className="text-xs text-muted-foreground">
-                Los assets quedan guardados en este navegador. Al activar login institucional
-                pasarán a la biblioteca compartida del equipo.
+                El ZIP se habilita cuando los tres formatos están aprobados.
               </p>
-            </TabsContent>
+            </div>
+          </Section>
+        </div>
 
-            <TabsContent value="marca" className="mt-4">
-              <BrandSettings brand={brand} onChange={update} onReset={reset} />
-            </TabsContent>
-          </Tabs>
+        <aside className="space-y-6">
+          <div className="rounded-xl border border-border bg-background p-4 shadow-sm">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">Control de calidad</h2>
+            <ul className="space-y-1.5">
+              {checklist.map((c) => (
+                <li key={c.label} className="flex items-start gap-2 text-xs">
+                  {c.ok ? (
+                    <Check className="mt-0.5 size-3.5 shrink-0 text-primary" />
+                  ) : (
+                    <X className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                  )}
+                  <span className={c.ok ? "text-muted-foreground" : "text-foreground"}>
+                    {c.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-border bg-background p-4 shadow-sm">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">Vista previa</h2>
+            {!template ? (
+              <p className="text-xs text-muted-foreground">
+                Selecciona un template para ver los tres formatos.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {FORMAT_ORDER.map((format) => {
+                  const f = FORMATS[format];
+                  const scale = 340 / f.width;
+                  return (
+                    <div key={format} className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {f.label} · {f.width}×{f.height}
+                      </p>
+                      <div
+                        className="overflow-hidden rounded-md ring-1 ring-border"
+                        style={{ width: f.width * scale, height: f.height * scale }}
+                      >
+                        <div style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
+                          <PieceCanvas
+                            ref={(el) => {
+                              canvasRefs.current[format] = el;
+                            }}
+                            format={format}
+                            template={template}
+                            copy={campaign.copy}
+                            programa={campaign.programa}
+                            modalidad={campaign.modalidad}
+                            ciudad={campaign.ciudad}
+                            snies={campaign.snies}
+                            assets={canvasAssets}
+                          />
+                        </div>
+                      </div>
+                      <Separator />
+                    </div>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={exporting}
+                  onClick={handleZip}
+                >
+                  <Download className="mr-1.5 size-3.5" />
+                  Exportar paquete
+                </Button>
+              </div>
+            )}
+          </div>
         </aside>
       </main>
     </div>
   );
 }
 
-function SliderRow({
-  label,
-  value,
-  onChange,
-  min = 0,
-  max = 100,
+function Section({
+  step,
+  title,
+  children,
 }: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  min?: number;
-  max?: number;
+  step: string;
+  title: string;
+  children: ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{label}</span>
-        <span className="font-mono">{value}%</span>
+    <section className="rounded-xl border border-border bg-background p-5 shadow-sm">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+          {step}
+        </span>
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       </div>
-      <Slider
-        min={min}
-        max={max}
-        step={1}
-        value={[value]}
-        onValueChange={([v]) => onChange(v ?? value)}
-      />
-    </div>
+      {children}
+    </section>
   );
 }

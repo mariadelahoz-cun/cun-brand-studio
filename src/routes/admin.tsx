@@ -121,7 +121,7 @@ function CategoryPanel({
 }: PanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [uploadTag, setUploadTag] = useState(BRAINROT_TAGS[0]);
+  const [uploadTag, setUploadTag] = useState<string>(BRAINROT_TAGS[0] ?? "Uso general");
   const items = assets.filter((a) => a.category === category);
 
   return (
