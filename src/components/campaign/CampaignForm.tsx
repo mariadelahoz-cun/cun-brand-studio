@@ -45,7 +45,7 @@ export function CampaignForm({ campaign, onChange }: Props) {
         <div className="space-y-1.5">
           <Label htmlFor="modalidad">Modalidad</Label>
           <Select
-            value={campaign.modalidad || undefined}
+            value={campaign.modalidad}
             onValueChange={(v) => onChange({ modalidad: v })}
           >
             <SelectTrigger id="modalidad">
