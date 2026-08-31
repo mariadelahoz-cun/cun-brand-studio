@@ -12,13 +12,49 @@ export const BRAND = {
   ink: "#12140F",
   paper: "#F4F1EA",
   white: "#FFFFFF",
-  /** Titular y remate */
-  fontDisplay: "'Knewave', system-ui, cursive",
+  /** Verde fijo del ícono de WhatsApp */
+  whatsapp: "#25D366",
+  /** Titular y remate: sans condensada en negrita/mayúsculas */
+  fontDisplay: "'Anton', 'Bebas Neue', 'Montserrat', system-ui, sans-serif",
   /** Programa, modalidad, SNIES, beneficio, CTA, microtextos */
   fontBody: "'Montserrat', system-ui, sans-serif",
   /** Margen de seguridad como fracción del lado menor */
   safeMarginRatio: 0.05,
 } as const;
+
+/** Rosa/magenta neón: único acento que se repite en todas las piezas */
+export const DEFAULT_ACCENT = "#FF1F8F";
+export const DEFAULT_BG = "#2A0A46";
+
+/** Favoritos de fondo: siempre oscuros y saturados */
+export const BG_PRESETS = [
+  "#2A0A46",
+  "#12002B",
+  "#6B0F1A",
+  "#3D0A0A",
+  "#0B1E4B",
+  "#04263F",
+  "#0C3B2E",
+  "#0F4D2A",
+  "#7A2E05",
+  "#B23A04",
+];
+
+export type PieceStyle = {
+  /** Fondo libre de la pieza */
+  bg: string;
+  /** Acento de CTA, barras de highlight y checks */
+  accent: string;
+  /** Glow del titular */
+  neon: boolean;
+};
+
+export const DEFAULT_STYLE: PieceStyle = {
+  bg: DEFAULT_BG,
+  accent: DEFAULT_ACCENT,
+  neon: true,
+};
+
 
 export type FormatId = "cuadrado" | "story" | "banner";
 
