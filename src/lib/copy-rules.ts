@@ -171,3 +171,43 @@ export function validateCopy(copy: CopyFields): CopyValidation {
     approved: wordsOk && hits.length === 0 && cta.ok && missing.length === 0,
   };
 }
+
+/** Palabras bloqueadas dentro de un texto suelto (campos por tipo de pieza) */
+export function bannedWordsInText(text: string) {
+  const found: string[] = [];
+  const flat = normalizeWord(text.replace(/\s+/g, " ").replace(/[^\p{L}\s]/gu, " "));
+  for (const { phrase, label } of BANNED_PHRASES) {
+    if (flat.includes(normalizeWord(phrase))) found.push(label);
+  }
+  for (const raw of words(text)) {
+    const w = normalizeWord(raw);
+    if (w.length < 3) continue;
+    const match = BANNED.find((b) => w.startsWith(b.root));
+    if (match) found.push(raw);
+  }
+  return Array.from(new Set(found));
+}
+
+export type TextsValidation = {
+  approved: boolean;
+  wordCount: number;
+  wordsOk: boolean;
+  banned: string[];
+  cta: CtaCheck;
+};
+
+/** Validación léxica y de conteo para el set de textos del tipo de pieza activo */
+export function validateTexts(values: string[], cta: string): TextsValidation {
+  const wordCount = values.reduce((n, v) => n + words(v).length, 0);
+  const banned = Array.from(new Set(values.flatMap((v) => bannedWordsInText(v))));
+  const ctaCheck = checkCta(cta);
+  const wordsOk = wordCount > 0 && wordCount <= MAX_WORDS;
+  return {
+    wordCount,
+    wordsOk,
+    banned,
+    cta: ctaCheck,
+    approved: wordsOk && banned.length === 0 && ctaCheck.ok,
+  };
+}
+
