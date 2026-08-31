@@ -198,7 +198,6 @@ export const PieceCanvas = forwardRef<HTMLDivElement, Props>(function PieceCanva
           <img
             src={assets.bgUrl}
             alt=""
-            crossOrigin="anonymous"
             style={{
               position: "absolute",
               inset: 0,
@@ -218,7 +217,6 @@ export const PieceCanvas = forwardRef<HTMLDivElement, Props>(function PieceCanva
           <img
             src={assets.fotoUrl}
             alt=""
-            crossOrigin="anonymous"
             draggable={false}
             onPointerDown={(e) =>
               begin(e, {
@@ -445,7 +443,6 @@ export const PieceCanvas = forwardRef<HTMLDivElement, Props>(function PieceCanva
             <img
               src={el.url}
               alt=""
-              crossOrigin="anonymous"
               draggable={false}
               style={{ width: "100%", height: "auto", display: "block", pointerEvents: "none" }}
             />
@@ -516,7 +513,6 @@ export const PieceCanvas = forwardRef<HTMLDivElement, Props>(function PieceCanva
           <img
             src={assets.logoUrl}
             alt="Logo institucional"
-            crossOrigin="anonymous"
             style={{
               height: franjaH * 0.56,
               width: "auto",

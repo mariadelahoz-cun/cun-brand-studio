@@ -147,7 +147,11 @@ export function useMediaLibrary() {
   }, []);
 
   const putAsset = useCallback(async (asset: MediaAsset) => {
-    await idbPut(asset);
+    try {
+      await idbPut(asset);
+    } catch {
+      /* IndexedDB bloqueado (p. ej. iframe): al menos queda en memoria esta sesión */
+    }
     setAssets((prev) => {
       const rest = prev.filter((a) => a.id !== asset.id);
       return [...rest, asset].sort((a, b) => a.createdAt - b.createdAt);
@@ -216,7 +220,11 @@ export function useMediaLibrary() {
   );
 
   const remove = useCallback(async (id: string) => {
-    await idbDelete(id);
+    try {
+      await idbDelete(id);
+    } catch {
+      /* noop */
+    }
     setAssets((prev) => prev.filter((a) => a.id !== id));
   }, []);
 

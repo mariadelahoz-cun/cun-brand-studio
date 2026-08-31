@@ -16,7 +16,6 @@ export function CunLogo({ heightPx, variant = "white" }: Props) {
     <img
       src={logoCun}
       alt="Corporación Unificada Nacional de Educación Superior"
-      crossOrigin="anonymous"
       style={{
         height: heightPx,
         width: "auto",

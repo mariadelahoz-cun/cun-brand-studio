@@ -23,6 +23,7 @@ import { pieceTypeById } from "@/lib/piece-types";
 import { MAX_WORDS, validatePiece } from "@/lib/copy-rules";
 import type { ResolvedElement } from "@/lib/placement";
 import { FORMATS, FORMAT_ORDER, exportFileName, isDark, type FormatId } from "@/lib/brand";
+import { bgPresetUrl } from "@/lib/bg-presets";
 import { logout } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
@@ -83,7 +84,7 @@ function CampaignWorkspace() {
   const elementLibrary = useMemo(() => approvedOf(assets, "elemento"), [assets]);
   const canvasAssets = useMemo(
     () => ({
-      bgUrl: url(campaign.style.bgImageId),
+      bgUrl: bgPresetUrl(campaign.style.bgImageId) ?? url(campaign.style.bgImageId),
       fotoUrl: url(campaign.fotoId),
       logoUrl: url(campaign.logoId),
     }),

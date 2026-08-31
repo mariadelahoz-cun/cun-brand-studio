@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { BRAND, DARK_BG_PRESETS, isDark, type PieceStyle } from "@/lib/brand";
+import { BG_PRESETS } from "@/lib/bg-presets";
 import type { MediaAsset } from "@/lib/media-library";
 
 type Props = {
@@ -116,8 +117,33 @@ export function StylePanel({
       </div>
 
       <div className="space-y-2">
+        <Label>Fondos de la campaña</Label>
+        <p className="text-xs text-muted-foreground">
+          Vienen con la app. Reemplazan al color sólido en esa pieza.
+        </p>
+        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+          {BG_PRESETS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              title={p.name}
+              onClick={() => onChange({ bgImageId: p.id === style.bgImageId ? null : p.id })}
+              className={cn(
+                "relative flex aspect-square items-center justify-center overflow-hidden rounded-md border-2 bg-muted",
+                p.id === style.bgImageId
+                  ? "border-primary"
+                  : "border-transparent hover:border-primary/40",
+              )}
+            >
+              <img src={p.url} alt={p.name} loading="lazy" className="h-full w-full object-cover" />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>Imagen de fondo (opcional)</Label>
+          <Label>Imagen de fondo propia (opcional)</Label>
           <input
             ref={fileRef}
             type="file"
@@ -141,9 +167,9 @@ export function StylePanel({
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Degradados, texturas o tramas a sangre. Reemplaza al color sólido en esa pieza.
+          Sube una imagen a sangre. Se guarda en este navegador.
         </p>
-        {(fondos.length > 0 || usingImage) && (
+        {(fondos.length > 0 || (usingImage && !style.bgImageId?.startsWith("preset:"))) && (
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
             {fondos.map((a) => (
               <button
