@@ -212,6 +212,35 @@ export function templateById(id: string | null) {
   return CAMPAIGN_TEMPLATES.find((t) => t.id === id) ?? null;
 }
 
+export type ResolvedPalette = {
+  canvas: string;
+  panel: string;
+  title: string;
+  remate: string;
+  body: string;
+  ctaBg: string;
+  ctaText: string;
+  franja: string;
+};
+
+/**
+ * El color de fondo y el acento los define el usuario por pieza.
+ * Cuerpo en blanco y franja de logos siempre fijos.
+ */
+export function resolvePalette(style: PieceStyle): ResolvedPalette {
+  return {
+    canvas: style.bg,
+    panel: style.bg,
+    title: BRAND.white,
+    remate: style.accent,
+    body: BRAND.white,
+    ctaBg: style.accent,
+    ctaText: BRAND.white,
+    franja: BRAND.white,
+  };
+}
+
+
 /** PROGRAMA_CIUDAD_FORMATO_ANCHOxALTO.png */
 export function slugPart(value: string) {
   return (
