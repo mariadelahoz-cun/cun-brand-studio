@@ -20,7 +20,7 @@
 
 @theme inline {
   --font-sans: "Inter", system-ui, sans-serif;
-  --font-display: "Caveat", cursive;
+  --font-display: "Anton", "Bebas Neue", sans-serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

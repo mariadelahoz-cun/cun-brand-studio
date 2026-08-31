@@ -1,34 +1,10 @@
 /**
  * Reglas de copy: filtro léxico, validador de CTA y conteo de palabras.
- * Todo se evalúa en cliente y en tiempo real; no hay generación automática.
+ * Se evalúa en cliente y en tiempo real sobre los campos del tipo de pieza
+ * elegido (ver piece-types) más los textos de la lista de ítems.
  */
 
-export type CopyFields = {
-  titular: string;
-  remate: string;
-  beneficio: string;
-  cta: string;
-  micro1: string;
-  micro2: string;
-};
-
-export const COPY_FIELD_LABELS: Record<keyof CopyFields, string> = {
-  titular: "Titular",
-  remate: "Remate",
-  beneficio: "Beneficio",
-  cta: "CTA",
-  micro1: "Microtexto 1",
-  micro2: "Microtexto 2",
-};
-
-export const EMPTY_COPY: CopyFields = {
-  titular: "",
-  remate: "",
-  beneficio: "",
-  cta: "",
-  micro1: "",
-  micro2: "",
-};
+import { getField, type PieceContent, type PieceTypeDef } from "./piece-types";
 
 export const MAX_WORDS = 24;
 
@@ -60,7 +36,7 @@ const BANNED: { root: string; label: string }[] = [
 
 const BANNED_PHRASES = [{ phrase: "haz parte", label: "Haz parte" }];
 
-/** Rutas de CTA permitidas (al menos una debe aparecer) */
+/** Rutas de CTA permitidas (al menos una debe aparecer en el CTA) */
 export const CTA_ROUTES = [
   { root: "divergen", label: "DIVERGENTE" },
   { root: "encien", label: "ENCIÉNDETE" },
@@ -76,59 +52,69 @@ export const CTA_ROUTES = [
 export const CTA_ROUTE_LABELS = Array.from(new Set(CTA_ROUTES.map((r) => r.label)));
 
 /** Quita acentos, mayúsculas y símbolos usados para camuflar palabras (g.r.a.t.i.s) */
-export function normalizeWord(word: string) {
+export function normalizeWord(word: string): string {
   return word
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
     .replace(/[0@]/g, "o")
     .replace(/[1!¡|]/g, "i")
     .replace(/3/g, "e")
-    .replace(/[4]/g, "a")
+    .replace(/4/g, "a")
     .replace(/[5$]/g, "s")
     .replace(/[^a-zñ]/g, "");
 }
 
-export function words(text: string) {
+export function words(text: string): string[] {
   return text.split(/\s+/).filter(Boolean);
 }
 
-export function countWords(copy: CopyFields) {
-  return (
-    words(copy.titular).length +
-    words(copy.remate).length +
-    words(copy.beneficio).length +
-    words(copy.cta).length +
-    words(copy.micro1).length +
-    words(copy.micro2).length
-  );
+/** Campos de texto del tipo (con etiqueta) + un pseudo-campo por cada ítem de la lista */
+export function collectText(
+  type: PieceTypeDef,
+  content: PieceContent,
+): { key: string; label: string; value: string }[] {
+  const out = type.fields.map((f) => ({
+    key: f.id,
+    label: f.label,
+    value: getField(content, f.id),
+  }));
+  if (type.hasItems) {
+    content.items.forEach((item, i) => {
+      out.push({ key: `item:${item.id}`, label: `Ítem ${i + 1}`, value: item.text });
+    });
+  }
+  return out;
 }
 
-export type LexiconHit = { field: keyof CopyFields; word: string; banned: string };
+export function countWords(type: PieceTypeDef, content: PieceContent): number {
+  return collectText(type, content).reduce((n, f) => n + words(f.value).length, 0);
+}
 
-export function lexiconHits(copy: CopyFields): LexiconHit[] {
+export type LexiconHit = { key: string; label: string; word: string; banned: string };
+
+export function lexiconHits(type: PieceTypeDef, content: PieceContent): LexiconHit[] {
   const hits: LexiconHit[] = [];
-  (Object.keys(copy) as (keyof CopyFields)[]).forEach((field) => {
-    const value = copy[field];
+  for (const { key, label, value } of collectText(type, content)) {
     const flat = normalizeWord(value.replace(/\s+/g, " ").replace(/[^\p{L}\s]/gu, " "));
-    for (const { phrase, label } of BANNED_PHRASES) {
+    for (const { phrase, label: bannedLabel } of BANNED_PHRASES) {
       if (flat.includes(normalizeWord(phrase))) {
-        hits.push({ field, word: phrase, banned: label });
+        hits.push({ key, label, word: phrase, banned: bannedLabel });
       }
     }
     for (const raw of words(value)) {
       const w = normalizeWord(raw);
       if (w.length < 3) continue;
       const match = BANNED.find((b) => w.startsWith(b.root));
-      if (match) hits.push({ field, word: raw, banned: match.label });
+      if (match) hits.push({ key, label, word: raw, banned: match.label });
     }
-  });
+  }
   return hits;
 }
 
-export function bannedWordsInField(copy: CopyFields, field: keyof CopyFields) {
-  return lexiconHits(copy)
-    .filter((h) => h.field === field)
+export function bannedWordsFor(type: PieceTypeDef, content: PieceContent, key: string): string[] {
+  return lexiconHits(type, content)
+    .filter((h) => h.key === key)
     .map((h) => h.word);
 }
 
@@ -140,34 +126,49 @@ export function checkCta(cta: string): CtaCheck {
     const w = normalizeWord(raw);
     return CTA_ROUTES.some((r) => w.startsWith(r.root));
   });
-  const lengthOk = n >= 2 && n <= 5;
+  const lengthOk = n >= 1 && n <= 5;
   let message = "CTA válido";
-  if (!lengthOk) message = `El CTA debe tener entre 2 y 5 palabras (tiene ${n}).`;
+  if (!lengthOk) message = `El CTA debe tener entre 1 y 5 palabras (tiene ${n}).`;
   else if (!hasRoute) message = "El CTA debe incluir una ruta aprobada.";
   return { ok: lengthOk && hasRoute, wordCount: n, hasRoute, message };
 }
 
-export type CopyValidation = {
+export type PieceValidation = {
   approved: boolean;
   wordCount: number;
   wordsOk: boolean;
   hits: LexiconHit[];
-  cta: CtaCheck;
-  missing: (keyof CopyFields)[];
+  /** null si el tipo no tiene campo CTA */
+  cta: CtaCheck | null;
+  /** Etiquetas de los campos requeridos que faltan */
+  missing: string[];
 };
 
-export function validateCopy(copy: CopyFields): CopyValidation {
-  const wordCount = countWords(copy);
-  const hits = lexiconHits(copy);
-  const cta = checkCta(copy.cta);
-  const missing = (Object.keys(copy) as (keyof CopyFields)[]).filter((f) => !copy[f].trim());
+export function validatePiece(type: PieceTypeDef, content: PieceContent): PieceValidation {
+  const wordCount = countWords(type, content);
+  const hits = lexiconHits(type, content);
+
+  const ctaField = type.fields.find((f) => f.id === "cta");
+  const ctaValue = ctaField ? getField(content, ctaField.id) : "";
+  const cta = ctaField && ctaValue.trim() ? checkCta(ctaValue) : ctaField ? checkCta("") : null;
+
+  const missing: string[] = [];
+  for (const f of type.fields) {
+    if (f.required && !getField(content, f.id).trim()) missing.push(f.label);
+  }
+  if (type.hasItems && content.items.filter((i) => i.text.trim()).length === 0) {
+    missing.push("Lista de ítems");
+  }
+
   const wordsOk = wordCount > 0 && wordCount <= MAX_WORDS;
+  const ctaOk = cta ? cta.ok : true;
+
   return {
     wordCount,
     wordsOk,
     hits,
     cta,
     missing,
-    approved: wordsOk && hits.length === 0 && cta.ok && missing.length === 0,
+    approved: wordsOk && hits.length === 0 && ctaOk && missing.length === 0,
   };
 }

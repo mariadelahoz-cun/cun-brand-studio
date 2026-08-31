@@ -1,10 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { toBlob } from "html-to-image";
 import JSZip from "jszip";
-import { Check, Download, Package, RotateCcw, Sparkles, X } from "lucide-react";
+import { Check, Download, LogOut, Package, Palette, RotateCcw, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "@tanstack/react-router";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,33 +11,31 @@ import { Separator } from "@/components/ui/separator";
 import { Toaster } from "@/components/ui/sonner";
 
 import { CampaignForm } from "@/components/campaign/CampaignForm";
-import { CopyPanel } from "@/components/campaign/CopyPanel";
-import { TemplateGallery } from "@/components/campaign/TemplateGallery";
-import { AssetZones } from "@/components/campaign/AssetZones";
+import { StylePanel } from "@/components/campaign/StylePanel";
+import { AssetPicker } from "@/components/campaign/AssetPicker";
 import { PieceCanvas } from "@/components/campaign/PieceCanvas";
+import { PieceEditor } from "@/components/campaign/PieceEditor";
 
 import { useCampaign } from "@/lib/use-campaign";
-import { useMediaLibrary } from "@/lib/media-library";
+import { approvedOf, useMediaLibrary } from "@/lib/media-library";
 import { useSeedLibrary } from "@/lib/seed-library";
-import { validateCopy } from "@/lib/copy-rules";
-import { FORMATS, FORMAT_ORDER, exportFileName, templateById, type FormatId } from "@/lib/brand";
+import { pieceTypeById } from "@/lib/piece-types";
+import { MAX_WORDS, validatePiece } from "@/lib/copy-rules";
+import type { ResolvedElement } from "@/lib/placement";
+import { FORMATS, FORMAT_ORDER, exportFileName, isDark, type FormatId } from "@/lib/brand";
+import { logout } from "@/lib/auth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "CUN Creativo — Campañas con templates de marca" },
+      { title: "CUN Creativo — Piezas de campañas" },
       {
         name: "description",
         content:
-          "Plataforma interna de la CUN para armar campañas en tres formatos con templates y bibliotecas de assets pre-aprobados por diseño.",
+          "Plataforma interna de la CUN: elige el tipo de pieza, llena solo sus campos, define el fondo y el acento neón, y exporta los tres formatos.",
       },
-      { property: "og:title", content: "CUN Creativo — Campañas con templates de marca" },
+      { property: "og:title", content: "CUN Creativo — Piezas de campañas" },
       { property: "og:type", content: "website" },
-      {
-        property: "og:description",
-        content:
-          "Formulario de campaña, validación de copy, bibliotecas curadas y exportación de los tres formatos aprobados.",
-      },
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
@@ -46,9 +43,30 @@ export const Route = createFileRoute("/")({
 });
 
 function CampaignWorkspace() {
-  const { campaign, patch, setStatus, reset, allApproved } = useCampaign();
-  const { assets, addFromUrl } = useMediaLibrary();
-  useSeedLibrary(addFromUrl);
+  const {
+    campaign,
+    content,
+    patch,
+    setPieceType,
+    setField,
+    addItem,
+    updateItem,
+    toggleItemMark,
+    removeItem,
+    setStyle,
+    commitColor,
+    setFixed,
+    setPhotoFrame,
+    addElement,
+    updateElement,
+    removeElement,
+    bringElementFront,
+    setStatus,
+    reset,
+    allApproved,
+  } = useCampaign();
+  const { assets, loaded: mediaLoaded, addFiles, addFromUrl } = useMediaLibrary();
+  useSeedLibrary(assets, addFromUrl, mediaLoaded);
 
   const [exporting, setExporting] = useState(false);
   const canvasRefs = useRef<Record<FormatId, HTMLDivElement | null>>({
@@ -57,33 +75,84 @@ function CampaignWorkspace() {
     banner: null,
   });
 
-  const template = templateById(campaign.templateId);
-  const copyCheck = validateCopy(campaign.copy);
+  const type = pieceTypeById(campaign.pieceType);
+  const validation = type ? validatePiece(type, content) : null;
 
   const url = (id: string | null) => assets.find((a) => a.id === id)?.dataUrl ?? null;
+  const fondos = useMemo(() => approvedOf(assets, "fondo"), [assets]);
+  const elementLibrary = useMemo(() => approvedOf(assets, "elemento"), [assets]);
   const canvasAssets = useMemo(
     () => ({
+      bgUrl: url(campaign.style.bgImageId),
       fotoUrl: url(campaign.fotoId),
-      brainrotUrl: url(campaign.brainrotId),
-      texturaUrls: campaign.texturaIds
-        .map((id) => url(id))
-        .filter((u): u is string => Boolean(u)),
       logoUrl: url(campaign.logoId),
     }),
-    [assets, campaign.fotoId, campaign.brainrotId, campaign.texturaIds, campaign.logoId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [assets, campaign.style.bgImageId, campaign.fotoId, campaign.logoId],
+  );
+  const resolvedElements = useMemo<ResolvedElement[]>(
+    () => campaign.elements.map((el) => ({ ...el, url: url(el.assetId) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [assets, campaign.elements],
   );
 
+  async function handleUploadFondo(files: File[]) {
+    try {
+      const created = await addFiles(files, "fondo", "Campaña", true);
+      const first = created[0];
+      if (first) {
+        setStyle({ bgImageId: first.id });
+        toast.success("Fondo agregado y aplicado a la pieza");
+      } else {
+        toast.error("Solo se aceptan imágenes");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar el fondo");
+    }
+  }
+
+  async function handleUploadElemento(files: File[]) {
+    try {
+      const created = await addFiles(files, "elemento", "Campaña", true);
+      const first = created[0];
+      if (first) {
+        addElement(first.id);
+        toast.success("Elemento agregado a la pieza");
+      } else {
+        toast.error("Solo se aceptan imágenes");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No se pudo guardar el elemento");
+    }
+  }
+
   const checklist = [
-    { label: "SNIES confirmado y fijo", ok: campaign.sniesConfirmed },
-    { label: "Template de campaña seleccionado", ok: Boolean(template) },
-    { label: "Copy completo (6 campos)", ok: copyCheck.missing.length === 0 },
-    { label: `Conteo de copy ≤ 24 palabras (${copyCheck.wordCount})`, ok: copyCheck.wordsOk },
-    { label: "Validación léxica aprobada", ok: copyCheck.hits.length === 0 },
-    { label: "CTA con ruta aprobada (2–5 palabras)", ok: copyCheck.cta.ok },
-    { label: "Fotografía aplicada", ok: Boolean(campaign.fotoId) },
-    { label: "Exactamente 1 recurso Brainrot", ok: Boolean(campaign.brainrotId) },
-    { label: "Mínimo 3 texturas Analogue", ok: campaign.texturaIds.length >= 3 },
-    { label: "Franja institucional reservada (12–18%)", ok: true },
+    { label: "Tipo de pieza elegido", ok: Boolean(type) },
+    {
+      label: `Campos requeridos completos${
+        validation && validation.missing.length ? `: falta ${validation.missing.join(", ")}` : ""
+      }`,
+      ok: Boolean(validation && validation.missing.length === 0),
+    },
+    {
+      label: `Conteo de copy ≤ ${MAX_WORDS} palabras (${validation?.wordCount ?? 0})`,
+      ok: Boolean(validation?.wordsOk),
+    },
+    {
+      label: "Validación léxica aprobada",
+      ok: Boolean(validation && validation.hits.length === 0),
+    },
+    {
+      label: validation?.cta
+        ? `CTA con ruta aprobada — ${validation.cta.message}`
+        : "CTA (no aplica)",
+      ok: validation?.cta ? validation.cta.ok : true,
+    },
+    {
+      label: campaign.style.bgImageId ? "Fondo (imagen)" : "Fondo oscuro y saturado",
+      ok: Boolean(campaign.style.bgImageId) || isDark(campaign.style.bgColor),
+    },
+    { label: "Franja de logos reservada", ok: true },
   ];
   const qcOk = checklist.every((c) => c.ok);
 
@@ -129,7 +198,6 @@ function CampaignWorkspace() {
     }
   }
 
-  const locked = !campaign.sniesConfirmed;
   const pending = nextApprovable();
 
   return (
@@ -143,12 +211,16 @@ function CampaignWorkspace() {
             </span>
             <div>
               <h1 className="text-sm font-semibold leading-tight text-foreground">CUN Creativo</h1>
-              <p className="text-xs text-muted-foreground">Campañas con templates aprobados</p>
+              <p className="text-xs text-muted-foreground">Piezas de campañas</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild>
               <Link to="/admin">Panel de administración</Link>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={logout}>
+              <LogOut className="mr-1.5 size-3.5" />
+              Salir
             </Button>
             <Button variant="outline" size="sm" onClick={reset}>
               <RotateCcw className="mr-1.5 size-3.5" />
@@ -164,38 +236,61 @@ function CampaignWorkspace() {
 
       <main className="mx-auto grid max-w-[1600px] gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="space-y-6">
-          <Section step="1" title="Datos de la campaña">
-            <CampaignForm campaign={campaign} onChange={patch} />
-          </Section>
-
-          <Section step="2" title="Template de campaña (define los tres formatos)">
-            <TemplateGallery
-              selectedId={campaign.templateId}
-              onSelect={(id) => patch({ templateId: id })}
-              disabled={locked}
+          <Section step="1" title="Tipo de pieza y contenido">
+            <CampaignForm
+              campaign={campaign}
+              onMeta={patch}
+              onPieceType={setPieceType}
+              onField={setField}
+              onAddItem={addItem}
+              onUpdateItem={updateItem}
+              onToggleItemMark={toggleItemMark}
+              onRemoveItem={removeItem}
+              onFixed={setFixed}
             />
           </Section>
 
-          <Section step="3" title="Copy de la pieza">
-            <CopyPanel
-              copy={campaign.copy}
-              onChange={(copy) => patch({ copy })}
-              programa={campaign.programa}
-              modalidad={campaign.modalidad}
-              ciudad={campaign.ciudad}
-              snies={campaign.snies}
+          <Section step="2" title="Sistema visual (fondo, acento y neón)">
+            <StylePanel
+              style={campaign.style}
+              recentColors={campaign.recentColors}
+              fondos={fondos}
+              onChange={setStyle}
+              onCommitColor={commitColor}
+              onUploadFondo={handleUploadFondo}
             />
           </Section>
 
-          <Section step="4" title="Assets por zona">
-            <AssetZones
+          <Section step="3" title="Fotografía y franja de logos">
+            <AssetPicker
               assets={assets}
               fotoId={campaign.fotoId}
-              brainrotId={campaign.brainrotId}
-              texturaIds={campaign.texturaIds}
               logoId={campaign.logoId}
               onChange={patch}
             />
+          </Section>
+
+          <Section step="4" title="Editor: mover la foto y agregar elementos">
+            {!type ? (
+              <p className="text-sm text-muted-foreground">
+                Elige un tipo de pieza para abrir el editor.
+              </p>
+            ) : (
+              <PieceEditor
+                campaign={campaign}
+                type={type}
+                content={content}
+                canvasAssets={canvasAssets}
+                elements={resolvedElements}
+                elementLibrary={elementLibrary}
+                onAddElement={addElement}
+                onUpdateElement={updateElement}
+                onRemoveElement={removeElement}
+                onBringFront={bringElementFront}
+                onPhotoChange={setPhotoFrame}
+                onUploadElement={handleUploadElemento}
+              />
+            )}
           </Section>
 
           <Section step="5" title="Aprobación secuencial de formatos">
@@ -272,10 +367,13 @@ function CampaignWorkspace() {
           </div>
 
           <div className="rounded-xl border border-border bg-background p-4 shadow-sm">
-            <h2 className="mb-3 text-sm font-semibold text-foreground">Vista previa</h2>
-            {!template ? (
+            <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Palette className="size-4" />
+              Vista previa
+            </h2>
+            {!type ? (
               <p className="text-xs text-muted-foreground">
-                Selecciona un template para ver los tres formatos.
+                Elige un tipo de pieza para ver los tres formatos.
               </p>
             ) : (
               <div className="space-y-4">
@@ -297,13 +395,14 @@ function CampaignWorkspace() {
                               canvasRefs.current[format] = el;
                             }}
                             format={format}
-                            template={template}
-                            copy={campaign.copy}
-                            programa={campaign.programa}
-                            modalidad={campaign.modalidad}
-                            ciudad={campaign.ciudad}
-                            snies={campaign.snies}
+                            type={type}
+                            content={content}
+                            style={campaign.style}
+                            fixed={campaign.fixed}
+                            meta={{ programa: campaign.programa, ciudad: campaign.ciudad }}
                             assets={canvasAssets}
+                            photoFrame={campaign.photoFrame}
+                            elements={resolvedElements}
                           />
                         </div>
                       </div>
@@ -330,15 +429,7 @@ function CampaignWorkspace() {
   );
 }
 
-function Section({
-  step,
-  title,
-  children,
-}: {
-  step: string;
-  title: string;
-  children: ReactNode;
-}) {
+function Section({ step, title, children }: { step: string; title: string; children: ReactNode }) {
   return (
     <section className="rounded-xl border border-border bg-background p-5 shadow-sm">
       <div className="mb-4 flex items-center gap-2">

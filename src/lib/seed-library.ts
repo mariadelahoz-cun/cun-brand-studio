@@ -1,30 +1,24 @@
 /**
  * Semilla de bibliotecas curadas: assets pre-aprobados por diseño para que
  * el equipo de mercadeo pueda armar campañas desde el primer ingreso.
+ *
+ * Es idempotente: solo agrega la semilla cuyo nombre aún no está en la
+ * biblioteca, así que sirve tanto en el primer ingreso como al aparecer
+ * semillas nuevas en una versión posterior.
  */
-import { useEffect } from "react";
-import type { AssetCategory } from "./media-library";
+import { useEffect, useRef } from "react";
+import type { AssetCategory, MediaAsset } from "./media-library";
 
 import fotoCampus from "@/assets/fondo-campus.jpg";
-import papelRasgado from "@/assets/analogue/papel-rasgado.png";
-import maskingTape from "@/assets/analogue/masking-tape.png";
-import marcador from "@/assets/analogue/marcador.png";
-import resaltador from "@/assets/analogue/resaltador.png";
-import graficaOjos from "@/assets/brainrot/grafica-ojos.png";
-import laptopOjos from "@/assets/brainrot/laptop-ojos.png";
-
-const FLAG = "cun-creativo:library-seeded:v1";
+import logoCun from "@/assets/logo-cun.png";
+import divergente from "@/assets/divergente.png";
 
 type Seed = { url: string; name: string; category: AssetCategory; tag: string };
 
 const SEEDS: Seed[] = [
   { url: fotoCampus, name: "campus-bogota.jpg", category: "foto", tag: "Uso general" },
-  { url: papelRasgado, name: "papel-rasgado.png", category: "analogue", tag: "Uso general" },
-  { url: maskingTape, name: "masking-tape.png", category: "analogue", tag: "Uso general" },
-  { url: marcador, name: "marcador.png", category: "analogue", tag: "Uso general" },
-  { url: resaltador, name: "resaltador.png", category: "analogue", tag: "Uso general" },
-  { url: graficaOjos, name: "grafica-ojos.png", category: "brainrot", tag: "Administración" },
-  { url: laptopOjos, name: "laptop-ojos.png", category: "brainrot", tag: "Tecnología" },
+  { url: logoCun, name: "cun-color.png", category: "logo", tag: "Uso general" },
+  { url: divergente, name: "lockup-divergente.png", category: "elemento", tag: "Campaña" },
 ];
 
 type AddFromUrl = (
@@ -35,19 +29,25 @@ type AddFromUrl = (
   approved?: boolean,
 ) => Promise<unknown>;
 
-export function useSeedLibrary(addFromUrl: AddFromUrl) {
+export function useSeedLibrary(assets: MediaAsset[], addFromUrl: AddFromUrl, ready = true) {
+  const done = useRef(false);
+
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (window.localStorage.getItem(FLAG)) return;
-    window.localStorage.setItem(FLAG, "1");
+    if (!ready || done.current || typeof window === "undefined") return;
+    const missing = SEEDS.filter((s) => !assets.some((a) => a.name === s.name));
+    if (missing.length === 0) {
+      done.current = true;
+      return;
+    }
+    done.current = true;
     (async () => {
-      for (const seed of SEEDS) {
+      for (const seed of missing) {
         try {
           await addFromUrl(seed.url, seed.name, seed.category, seed.tag, true);
         } catch {
-          /* la biblioteca queda disponible desde el panel de administración */
+          done.current = false; // reintenta en el próximo render
         }
       }
     })();
-  }, [addFromUrl]);
+  }, [assets, addFromUrl, ready]);
 }

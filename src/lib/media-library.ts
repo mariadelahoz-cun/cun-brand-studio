@@ -1,63 +1,53 @@
 /**
  * Bibliotecas de assets curadas. Diseño sube y aprueba desde el panel de
  * administración; mercadeo solo puede seleccionar assets aprobados.
- * Persistencia local (MVP sin login); al activar Lovable Cloud este módulo
- * se reemplaza por almacenamiento compartido sin tocar los componentes.
+ * Persistencia local en IndexedDB (localStorage se quedaba sin espacio con
+ * pocas imágenes). Al conectar un backend compartido este módulo se reemplaza
+ * sin tocar los componentes.
  */
 import { useCallback, useEffect, useState } from "react";
+import { idbDelete, idbGetAll, idbPut } from "./idb";
 
-export type AssetCategory = "foto" | "brainrot" | "analogue" | "logo";
+export type AssetCategory = "foto" | "fondo" | "logo" | "elemento";
 
 export type MediaAsset = {
   id: string;
   name: string;
   category: AssetCategory;
-  /** Etiqueta de programa o uso general (obligatoria para Brainrot) */
+  /** Etiqueta de programa, ciudad, campaña o uso general */
   tag: string;
   approved: boolean;
   dataUrl: string;
   createdAt: number;
 };
 
-const KEY = "cun-creativo:media:v2";
-
 export const CATEGORY_LABELS: Record<AssetCategory, string> = {
   foto: "Fotografías",
-  brainrot: "Recursos Brainrot",
-  analogue: "Texturas Analogue",
+  fondo: "Fondos",
   logo: "Logos institucionales",
+  elemento: "Elementos gráficos",
 };
 
 export const CATEGORY_RULES: Record<AssetCategory, string> = {
-  foto: "Fotografía publicitaria fotorrealista colombiana, personas reales, escenario reconocible. Sin anime, 3D ni banco de imágenes genérico.",
-  brainrot:
-    "Objetos con ojos, gráficas que reaccionan, diagnósticos ridículos, stickers narrativos. Sin texto incrustado fuera de la lista blanca.",
-  analogue:
-    "Overlays PNG con transparencia: papel rasgado, masking tape, marcador, resaltador, fotocopia, impresión.",
-  logo: "Solo versiones aprobadas (color, blanco, negro) para la franja institucional.",
+  foto: "Fotografía publicitaria fotorrealista, persona real sobre fondo oscuro con luz de neón. Se coloca a sangre detrás del texto y se puede reposicionar.",
+  fondo:
+    "Imagen que se usa a sangre como fondo de la pieza (degradados, texturas, tramas oscuras y saturadas). Alternativa al color sólido.",
+  logo: "Solo versiones aprobadas (blanco / color) para la franja institucional. Reemplaza al logo CUN por defecto.",
+  elemento:
+    "PNG con transparencia que se agrega sobre la pieza y se mueve libremente: lockup ¿Piensas divergente?, stickers, sellos, formas de la campaña.",
 };
 
-export const BRAINROT_TAGS = [
-  "Uso general",
-  "Administración",
-  "Ingeniería",
-  "Diseño y comunicación",
-  "Salud",
-  "Tecnología",
-];
+export const ASSET_TAGS = ["Uso general", "Programa", "Ciudad", "Campaña"];
 
-function read(): MediaAsset[] {
-  if (typeof window === "undefined") return [];
-  try {
-    return JSON.parse(window.localStorage.getItem(KEY) ?? "[]") as MediaAsset[];
-  } catch {
-    return [];
-  }
-}
-
-function write(assets: MediaAsset[]) {
-  window.localStorage.setItem(KEY, JSON.stringify(assets));
-}
+/** Categorías con transparencia: se guardan como PNG */
+const KEEP_PNG: AssetCategory[] = ["logo", "elemento"];
+/** Lado mayor máximo al guardar */
+const MAX_DIM: Record<AssetCategory, number> = {
+  foto: 1600,
+  fondo: 1600,
+  logo: 1000,
+  elemento: 1200,
+};
 
 export function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -68,44 +58,132 @@ export function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("No se pudo leer la imagen"));
+    img.src = src;
+  });
+}
+
+/** Reescala si hace falta y comprime, para que quepa en IndexedDB sin problema */
+async function normalizeImage(dataUrl: string, category: AssetCategory): Promise<string> {
+  try {
+    const img = await loadImage(dataUrl);
+    const max = MAX_DIM[category];
+    const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const keepPng = KEEP_PNG.includes(category);
+    // Sin reescalado y ya es liviana: se deja igual
+    if (scale === 1 && dataUrl.length < 900_000) return dataUrl;
+
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return dataUrl;
+    ctx.drawImage(img, 0, 0, w, h);
+    return keepPng ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.82);
+  } catch {
+    return dataUrl;
+  }
+}
+
+const LEGACY_KEY = "cun-creativo:media:v2";
+
+/** Una sola vez: pasa lo que quedó en localStorage a IndexedDB */
+async function migrateLegacy(): Promise<MediaAsset[]> {
+  if (typeof window === "undefined") return [];
+  let legacy: MediaAsset[] = [];
+  try {
+    legacy = JSON.parse(window.localStorage.getItem(LEGACY_KEY) ?? "[]") as MediaAsset[];
+  } catch {
+    legacy = [];
+  }
+  if (!legacy.length) return [];
+  for (const asset of legacy) {
+    try {
+      await idbPut(asset);
+    } catch {
+      /* se ignora el asset que no entre */
+    }
+  }
+  try {
+    window.localStorage.removeItem(LEGACY_KEY);
+  } catch {
+    /* noop */
+  }
+  return legacy;
+}
+
 export function useMediaLibrary() {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setAssets(read());
+    let alive = true;
+    (async () => {
+      let list: MediaAsset[] = [];
+      try {
+        list = await idbGetAll<MediaAsset>();
+      } catch {
+        list = [];
+      }
+      if (list.length === 0) {
+        const migrated = await migrateLegacy();
+        if (migrated.length) list = migrated;
+      }
+      if (alive) {
+        setAssets(list.sort((a, b) => a.createdAt - b.createdAt));
+        setLoaded(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  const persist = useCallback((next: MediaAsset[]) => {
-    setAssets(next);
-    write(next);
+  const putAsset = useCallback(async (asset: MediaAsset) => {
+    await idbPut(asset);
+    setAssets((prev) => {
+      const rest = prev.filter((a) => a.id !== asset.id);
+      return [...rest, asset].sort((a, b) => a.createdAt - b.createdAt);
+    });
   }, []);
 
   const addFiles = useCallback(
-    async (files: File[], category: AssetCategory, tag: string) => {
+    async (files: File[], category: AssetCategory, tag: string, approved = false) => {
       const created: MediaAsset[] = [];
       for (const file of files) {
         if (!file.type.startsWith("image/")) continue;
-        created.push({
+        const raw = await readFileAsDataUrl(file);
+        const dataUrl = await normalizeImage(raw, category);
+        const asset: MediaAsset = {
           id: crypto.randomUUID(),
           name: file.name,
           category,
           tag: tag || "Uso general",
-          approved: false,
-          dataUrl: await readFileAsDataUrl(file),
+          approved,
+          dataUrl,
           createdAt: Date.now(),
-        });
+        };
+        await putAsset(asset);
+        created.push(asset);
       }
-      if (created.length) persist([...read(), ...created]);
       return created;
     },
-    [persist],
+    [putAsset],
   );
 
   const addFromUrl = useCallback(
     async (url: string, name: string, category: AssetCategory, tag: string, approved = true) => {
       const res = await fetch(url);
       const blob = await res.blob();
-      const dataUrl = await readFileAsDataUrl(new File([blob], name, { type: blob.type }));
+      const raw = await readFileAsDataUrl(new File([blob], name, { type: blob.type }));
+      const dataUrl = await normalizeImage(raw, category);
       const asset: MediaAsset = {
         id: crypto.randomUUID(),
         name,
@@ -115,26 +193,34 @@ export function useMediaLibrary() {
         dataUrl,
         createdAt: Date.now(),
       };
-      persist([...read(), asset]);
+      await putAsset(asset);
       return asset;
     },
-    [persist],
+    [putAsset],
   );
 
   const setApproval = useCallback(
-    (id: string, approved: boolean) =>
-      persist(read().map((a) => (a.id === id ? { ...a, approved } : a))),
-    [persist],
+    async (id: string, approved: boolean) => {
+      const current = assets.find((a) => a.id === id);
+      if (current) await putAsset({ ...current, approved });
+    },
+    [assets, putAsset],
   );
 
   const setTag = useCallback(
-    (id: string, tag: string) => persist(read().map((a) => (a.id === id ? { ...a, tag } : a))),
-    [persist],
+    async (id: string, tag: string) => {
+      const current = assets.find((a) => a.id === id);
+      if (current) await putAsset({ ...current, tag });
+    },
+    [assets, putAsset],
   );
 
-  const remove = useCallback((id: string) => persist(read().filter((a) => a.id !== id)), [persist]);
+  const remove = useCallback(async (id: string) => {
+    await idbDelete(id);
+    setAssets((prev) => prev.filter((a) => a.id !== id));
+  }, []);
 
-  return { assets, addFiles, addFromUrl, setApproval, setTag, remove };
+  return { assets, loaded, addFiles, addFromUrl, setApproval, setTag, remove };
 }
 
 export function approvedOf(assets: MediaAsset[], category: AssetCategory) {

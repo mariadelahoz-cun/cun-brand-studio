@@ -15,7 +15,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Toaster } from "@/components/ui/sonner";
 import {
-  BRAINROT_TAGS,
+  ASSET_TAGS,
   CATEGORY_LABELS,
   CATEGORY_RULES,
   useMediaLibrary,
@@ -31,7 +31,7 @@ export const Route = createFileRoute("/admin")({
       {
         name: "description",
         content:
-          "Panel de diseño para subir, etiquetar y aprobar fotografías, recursos Brainrot, texturas Analogue y logos antes de habilitarlos para mercadeo.",
+          "Panel de diseño para subir, etiquetar y aprobar fotografías y logos antes de habilitarlos para mercadeo.",
       },
       { property: "og:title", content: "Administración de bibliotecas — CUN Creativo" },
       {
@@ -46,11 +46,11 @@ export const Route = createFileRoute("/admin")({
   component: AdminPage,
 });
 
-const CATEGORIES: AssetCategory[] = ["foto", "brainrot", "analogue", "logo"];
+const CATEGORIES: AssetCategory[] = ["foto", "fondo", "elemento", "logo"];
 
 function AdminPage() {
-  const { assets, addFiles, addFromUrl, setApproval, setTag, remove } = useMediaLibrary();
-  useSeedLibrary(addFromUrl);
+  const { assets, loaded, addFiles, addFromUrl, setApproval, setTag, remove } = useMediaLibrary();
+  useSeedLibrary(assets, addFromUrl, loaded);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -58,9 +58,7 @@ function AdminPage() {
       <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-[1200px] items-center justify-between gap-4 px-6 py-3">
           <div>
-            <h1 className="text-sm font-semibold text-foreground">
-              Administración de bibliotecas
-            </h1>
+            <h1 className="text-sm font-semibold text-foreground">Administración de bibliotecas</h1>
             <p className="text-xs text-muted-foreground">
               Diseño sube, etiqueta y aprueba los assets disponibles para mercadeo
             </p>
@@ -111,17 +109,10 @@ type PanelProps = {
   remove: ReturnType<typeof useMediaLibrary>["remove"];
 };
 
-function CategoryPanel({
-  category,
-  assets,
-  addFiles,
-  setApproval,
-  setTag,
-  remove,
-}: PanelProps) {
+function CategoryPanel({ category, assets, addFiles, setApproval, setTag, remove }: PanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
-  const [uploadTag, setUploadTag] = useState<string>(BRAINROT_TAGS[0] ?? "Uso general");
+  const [uploadTag, setUploadTag] = useState<string>(ASSET_TAGS[0] ?? "Uso general");
   const items = assets.filter((a) => a.category === category);
 
   return (
@@ -138,7 +129,7 @@ function CategoryPanel({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {BRAINROT_TAGS.map((t) => (
+              {ASSET_TAGS.map((t) => (
                 <SelectItem key={t} value={t}>
                   {t}
                 </SelectItem>
@@ -166,9 +157,7 @@ function CategoryPanel({
         )}
       >
         <Upload className="size-5 text-muted-foreground" />
-        <p className="text-sm font-medium text-foreground">
-          Subir a {CATEGORY_LABELS[category]}
-        </p>
+        <p className="text-sm font-medium text-foreground">Subir a {CATEGORY_LABELS[category]}</p>
         <p className="text-xs text-muted-foreground">
           Los assets entran como pendientes hasta que diseño los apruebe
         </p>
@@ -213,7 +202,7 @@ function CategoryPanel({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {BRAINROT_TAGS.map((t) => (
+                  {ASSET_TAGS.map((t) => (
                     <SelectItem key={t} value={t}>
                       {t}
                     </SelectItem>
