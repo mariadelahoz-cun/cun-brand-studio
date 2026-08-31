@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Check, Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -23,6 +26,7 @@ import {
   type PieceTypeId,
 } from "@/lib/piece-types";
 import { bannedWordsFor } from "@/lib/copy-rules";
+import { ALL_LOCATIONS, CITIES, LOCATION_CUSTOM, NACIONAL, REGIONS } from "@/lib/regions";
 import { LEGAL_PRESETS, type CampaignState, type FixedData } from "@/lib/use-campaign";
 
 type Props = {
@@ -59,6 +63,12 @@ export function CampaignForm({
     ? campaign.fixed.legalText
     : LEGAL_CUSTOM;
 
+  const ciudadIsCustom =
+    campaign.ciudad.trim().length > 0 && !ALL_LOCATIONS.includes(campaign.ciudad);
+  const [pickedOtra, setPickedOtra] = useState(false);
+  const showCustomLoc = pickedOtra || ciudadIsCustom;
+  const ciudadSelect = showCustomLoc ? LOCATION_CUSTOM : campaign.ciudad;
+
   return (
     <div className="space-y-6">
       {/* Identificación */}
@@ -75,12 +85,49 @@ export function CampaignForm({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="ciudad">Ciudad o región</Label>
-          <Input
-            id="ciudad"
-            value={campaign.ciudad}
-            maxLength={60}
-            onChange={(e) => onMeta({ ciudad: e.target.value })}
-          />
+          <Select
+            value={ciudadSelect}
+            onValueChange={(v) => {
+              if (v === LOCATION_CUSTOM) {
+                setPickedOtra(true);
+              } else {
+                setPickedOtra(false);
+                onMeta({ ciudad: v });
+              }
+            }}
+          >
+            <SelectTrigger id="ciudad">
+              <SelectValue placeholder="Elige la cobertura" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NACIONAL}>{NACIONAL}</SelectItem>
+              <SelectGroup>
+                <SelectLabel>Regiones</SelectLabel>
+                {REGIONS.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectGroup>
+                <SelectLabel>Ciudades</SelectLabel>
+                {CITIES.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectItem value={LOCATION_CUSTOM}>Otra…</SelectItem>
+            </SelectContent>
+          </Select>
+          {showCustomLoc && (
+            <Input
+              value={campaign.ciudad}
+              maxLength={60}
+              placeholder="Escribe la ciudad o región"
+              onChange={(e) => onMeta({ ciudad: e.target.value })}
+            />
+          )}
         </div>
       </div>
 

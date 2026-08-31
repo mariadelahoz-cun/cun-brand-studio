@@ -13,9 +13,13 @@ export type PhotoFrame = {
   y: number;
   /** zoom, 1 = sin acercar */
   scale: number;
+  /** opacidad de la foto sobre el fondo (0 transparente – 1 opaca) */
+  opacity: number;
+  /** fuerza del degradado oscuro para legibilidad del texto (0–1) */
+  scrim: number;
 };
 
-export const DEFAULT_PHOTO_FRAME: PhotoFrame = { x: 50, y: 50, scale: 1 };
+export const DEFAULT_PHOTO_FRAME: PhotoFrame = { x: 50, y: 50, scale: 1, opacity: 1, scrim: 1 };
 
 export type PlacedElement = {
   id: string;
@@ -28,13 +32,15 @@ export type PlacedElement = {
   w: number;
   /** rotación en grados */
   rot: number;
+  /** opacidad (0 transparente – 1 opaco) */
+  opacity: number;
 };
 
 /** Elemento con la URL de su asset ya resuelta, para dibujar en el lienzo */
 export type ResolvedElement = PlacedElement & { url: string | null };
 
 export function makeElement(assetId: string): PlacedElement {
-  return { id: crypto.randomUUID(), assetId, x: 0.5, y: 0.42, w: 0.44, rot: 0 };
+  return { id: crypto.randomUUID(), assetId, x: 0.5, y: 0.42, w: 0.44, rot: 0, opacity: 1 };
 }
 
 export function clamp(value: number, min: number, max: number): number {

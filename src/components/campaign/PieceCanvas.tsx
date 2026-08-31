@@ -237,19 +237,22 @@ export const PieceCanvas = forwardRef<HTMLDivElement, Props>(function PieceCanva
               objectPosition: `${photoFrame.x}% ${photoFrame.y}%`,
               transform: `scale(${photoFrame.scale})`,
               transformOrigin: `${photoFrame.x}% ${photoFrame.y}%`,
+              opacity: photoFrame.opacity ?? 1,
               display: "block",
               cursor: interactive ? "grab" : "default",
               touchAction: "none",
             }}
           />
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-              background: `linear-gradient(90deg, ${pal.canvas} 34%, ${withAlpha(pal.canvas, 0.55)} 62%, ${withAlpha(pal.canvas, 0.1)} 100%)`,
-            }}
-          />
+          {(photoFrame.scrim ?? 1) > 0 ? (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                background: `linear-gradient(90deg, ${withAlpha(pal.canvas, photoFrame.scrim ?? 1)} 34%, ${withAlpha(pal.canvas, (photoFrame.scrim ?? 1) * 0.55)} 62%, ${withAlpha(pal.canvas, (photoFrame.scrim ?? 1) * 0.1)} 100%)`,
+              }}
+            />
+          ) : null}
         </>
       ) : null}
 
@@ -432,6 +435,7 @@ export const PieceCanvas = forwardRef<HTMLDivElement, Props>(function PieceCanva
               top: el.y * height,
               width: el.w * width,
               transform: `translate(-50%, -50%) rotate(${el.rot}deg)`,
+              opacity: el.opacity ?? 1,
               cursor: interactive ? "move" : "default",
               touchAction: "none",
               outline: selected ? `${3 / displayScale}px dashed ${pal.accent}` : "none",

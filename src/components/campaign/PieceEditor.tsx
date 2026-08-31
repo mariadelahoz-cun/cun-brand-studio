@@ -6,12 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { FORMATS, FORMAT_ORDER, type FormatId } from "@/lib/brand";
-import {
-  DEFAULT_PHOTO_FRAME,
-  type PhotoFrame,
-  type PlacedElement,
-  type ResolvedElement,
-} from "@/lib/placement";
+import type { PhotoFrame, PlacedElement, ResolvedElement } from "@/lib/placement";
 import type { PieceTypeDef, PieceContent } from "@/lib/piece-types";
 import type { CampaignState } from "@/lib/use-campaign";
 import type { MediaAsset } from "@/lib/media-library";
@@ -242,6 +237,20 @@ export function PieceEditor({
                   onValueChange={([v]) => onUpdateElement(selected.id, { rot: v ?? 0 })}
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Opacidad ({Math.round((selected.opacity ?? 1) * 100)}%)
+                </Label>
+                <Slider
+                  min={10}
+                  max={100}
+                  step={1}
+                  value={[Math.round((selected.opacity ?? 1) * 100)]}
+                  onValueChange={([v]) =>
+                    onUpdateElement(selected.id, { opacity: (v ?? 100) / 100 })
+                  }
+                />
+              </div>
               <Button
                 type="button"
                 variant="outline"
@@ -269,7 +278,7 @@ export function PieceEditor({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  onClick={() => onPhotoChange(DEFAULT_PHOTO_FRAME)}
+                  onClick={() => onPhotoChange({ x: 50, y: 50, scale: 1 })}
                 >
                   <RotateCcw className="mr-1.5 size-3.5" />
                   Centrar
@@ -283,6 +292,34 @@ export function PieceEditor({
                   step={0.05}
                   value={[campaign.photoFrame.scale]}
                   onValueChange={([v]) => onPhotoChange({ scale: v ?? 1 })}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Opacidad de la foto ({Math.round((campaign.photoFrame.opacity ?? 1) * 100)}%)
+                </Label>
+                <Slider
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={[Math.round((campaign.photoFrame.opacity ?? 1) * 100)]}
+                  onValueChange={([v]) => onPhotoChange({ opacity: (v ?? 100) / 100 })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Baja la opacidad para que el color o la imagen de fondo se vean a través de la
+                  foto.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">
+                  Velo para el texto ({Math.round((campaign.photoFrame.scrim ?? 1) * 100)}%)
+                </Label>
+                <Slider
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={[Math.round((campaign.photoFrame.scrim ?? 1) * 100)]}
+                  onValueChange={([v]) => onPhotoChange({ scrim: (v ?? 100) / 100 })}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
