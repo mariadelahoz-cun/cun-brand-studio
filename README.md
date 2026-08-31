@@ -193,23 +193,6 @@ Cuatro bibliotecas de assets curados:
 
 ---
 
-## 11. Notas técnicas
-
-**Stack:** TanStack Start (React 19) · Tailwind v4 · shadcn/ui · Vite · nitro (Cloudflare).
-El render de las piezas y la exportación a PNG son 100 % en el navegador
-(`html-to-image` + `jszip`). No hay backend: la biblioteca vive en IndexedDB y el
-estado de la campaña en `localStorage`.
-
-**Persistencia por navegador:** los assets y la campaña en curso **no se comparten**
-entre equipos ni dispositivos. Para trabajo colaborativo hay que conectar un backend.
-
-**Sistema de marca** (`src/lib/brand.ts`):
-titulares `Anton`, cuerpo `Montserrat`, acento por defecto `#FF1F8F`, WhatsApp `#25D366`,
-presets de fondo en `DARK_BG_PRESETS`, franja y márgenes de seguridad fijos.
-
-**Login institucional sin API de Google:** el despliegue va a Cloudflare (config en
-`vite.config.ts` / nitro), así que la ruta recomendada es **Cloudflare Access**
-(Zero Trust) con OTP por correo o el SAML/OIDC de la CUN, sin escribir backend.
 
 ### Desarrollo local
 
